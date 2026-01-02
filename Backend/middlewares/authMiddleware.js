@@ -1,6 +1,7 @@
 const userModel = require('../models/userModel')
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const captainModel = require('../models/captainModel');
 
 module.exports.authUser = async (req, res, next) => {
     try {
@@ -23,6 +24,39 @@ module.exports.authUser = async (req, res, next) => {
         }
 
         req.user = user;
+        next();
+    } catch (err) {
+        if (err.name === 'JsonWebTokenError') {
+            return res.status(401).json({ message: 'Invalid token' });
+        }
+        if (err.name === 'TokenExpiredError') {
+            return res.status(401).json({ message: 'Token expired' });
+        }
+        return res.status(500).json({ message: 'Authentication error' });
+    }
+}
+
+module.exports.authCaptain = async (req, res, next) => {
+    try {
+        const token = req.cookies.token || req.headers.authorization?.split(' ')[1];
+
+        if (!token) {
+            return res.status(401).json({ message: 'No token provided' });
+        }
+
+        const isBlacklisted = await blacklistTokenModel.findOne({ token: token });
+        if (isBlacklisted) {
+            return res.status(401).json({ message: 'Token has been invalidated' });
+        }
+
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const captain = await captainModel.findById(decoded._id);
+
+        if (!captain) {
+            return res.status(401).json({ message: 'User not found' });
+        }
+
+        req.captain = captain;
         next();
     } catch (err) {
         if (err.name === 'JsonWebTokenError') {
